@@ -1,0 +1,129 @@
+using GoogleMobileAds.Api;
+using System;
+using System.Collections;
+using UnityEngine;
+using UnityEngine.UI;
+
+public class RewardAdScript : MonoBehaviour
+{
+    public GameObject countDownScreen;
+    public UnityMainThreadDispatcher dispatcher; // dispatcher will bring the task in main thread 
+    public GameObject noInternetDialog, connectingScreen, loadingAdScreen;
+    private RewardedAd rewardedAd;
+    public Button continueButton;
+    public static bool retryEnabled = false;
+
+#if UNITY_ANDROID
+  private string _adUnitId = "ca-app-pub-3940256099942544/5224354917";
+#elif UNITY_IPHONE
+  private string _adUnitId = "ca-app-pub-3940256099942544/1712485313";
+#else
+  private string _adUnitId = "unused";
+#endif
+
+    void Start()
+    {
+        MobileAds.Initialize((InitializationStatus initStatus) =>
+        {
+        });
+        LoadRewardedAd();
+    }
+
+    public void LoadRewardedAd()
+    {
+        if (rewardedAd != null)
+        {
+            rewardedAd.Destroy();
+            rewardedAd = null;
+        }
+        var adRequest = new AdRequest();
+        RewardedAd.Load(_adUnitId, adRequest,
+            (RewardedAd ad, LoadAdError error) =>
+            {   
+                if (error != null || ad == null)
+                {   
+                    InternetConnection.retried = true;
+                }
+                rewardedAd = ad;
+                RegisterEventHandlers(rewardedAd);
+                // dispatcher.Enqueue(HideNoInternetDialog());
+            });
+    }
+
+     public void ContinueGame()
+    {
+        Time.timeScale = 0.0f;
+        countDownScreen.GetComponent<CountDownScript>().ResumeGame();
+    }
+
+    public IEnumerator ShowUserPanel()
+    {
+        ContinueGame();
+        yield return null;
+    }
+
+    public IEnumerator ShowNoInternetDialog()
+    {
+        loadingAdScreen.SetActive(false);
+        noInternetDialog.SetActive(true);
+        yield return null;
+    }
+
+    public IEnumerator HideNoInternetDialog()
+    {
+        noInternetDialog.SetActive(false);
+        connectingScreen.SetActive(false);
+        loadingAdScreen.SetActive(false);
+        yield return null;
+    }
+
+    public void ShowRewardedAd()
+    {
+
+        if (rewardedAd != null && rewardedAd.CanShowAd())
+        {
+            rewardedAd.Show((Reward reward) =>
+            {
+                dispatcher.Enqueue(ShowUserPanel());
+            });
+        }else{
+            
+            dispatcher.Enqueue(ShowNoInternetDialog());
+        }
+    }
+
+    public void RegisterEventHandlers(RewardedAd ad)
+    {
+        ad.OnAdPaid += (AdValue adValue) =>
+        {
+            
+        };
+        ad.OnAdImpressionRecorded += () =>
+        {
+        };
+        ad.OnAdClicked += () =>
+        {
+        };
+        ad.OnAdFullScreenContentOpened += () =>
+        {
+            // dispatcher.Enqueue(ShowNoInternetDialog());
+        };
+        ad.OnAdFullScreenContentClosed += () =>
+        {
+            VerifyValidAttemptToWatchAdd._adAttempt -=1;
+            dispatcher.Enqueue(HideNoInternetDialog());
+            LoadRewardedAd();
+        };
+        ad.OnAdFullScreenContentFailed += (AdError error) =>
+        {  
+            dispatcher.Enqueue(ShowNoInternetDialog());
+        };
+        
+    }
+
+    public void UpdateRetryStatus(){
+     
+        LoadRewardedAd();
+        ShowRewardedAd();
+    }
+}
